@@ -144,17 +144,8 @@ def start(message):
     live_or_id = bot.send_message(message.chat.id, "OR...").message_id
     threading.Thread(target=moteur_principal, args=(message.chat.id,), daemon=True).start()
 
-# ... (tout le reste du code reste identique au-dessus)
-
 # --- LANCEMENT ---
 if __name__ == "__main__":
-    keep_alive()  # Démarre le serveur Flask (pour Render)
-    
-    # ÉTAPE CRUCIALE POUR RÉGLER L'ERREUR 409 CONFLICT :
-    bot.remove_webhook() 
-    
-    print("Bot en ligne...") # Optionnel, pour voir dans les logs de Render
-    
-    # Lancement du polling robuste
-    bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    keep_alive() # Démarre le serveur Flask pour éviter le sleep de Render
+    bot.infinity_polling(timeout=10, long_polling_timeout=5) # Polling robuste
 
