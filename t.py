@@ -1,4 +1,4 @@
-import telebot
+import pyTelegramBotAPI
 import requests
 import time
 import threading
