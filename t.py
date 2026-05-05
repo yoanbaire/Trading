@@ -8,7 +8,7 @@ from telebot import types
 from flask import Flask
 from threading import Thread
 
-# --- CONFIGURATION POUR RENDER ---
+# --- CONFIGURATION POUR RENDER (KEEP-ALIVE) ---
 app = Flask('')
 
 @app.route('/')
@@ -23,9 +23,9 @@ def keep_alive():
     t.start()
 
 # --- CONFIGURATION DU BOT ---
-# REMPLACE BIEN TON TOKEN CI-DESSOUS
+# Utilisation du Token en direct et activation du multi-threading natif
 API_TOKEN = '8606494026:AAHUTkTJonxPkXnveSJfTvAmMDNYpXjeJw0'
-bot = telebot.TeleBot(API_TOKEN)
+bot = telebot.TeleBot(API_TOKEN, threaded=True, num_threads=4)
 
 # Variables globales
 live_btc_id = None
@@ -43,8 +43,7 @@ def calculer_rsi_binance(symbole, periode=14):
         baisses = [max(0, closes[i-1] - closes[i]) for i in range(1, len(closes))]
         moy_h, moy_b = sum(hausses)/periode, sum(baisses)/periode
         return round(100 - (100 / (1 + (moy_h/moy_b))), 1) if moy_b != 0 else 100.0
-    except Exception as e:
-        print(f"Erreur RSI Binance {symbole}: {e}")
+    except:
         return 50.0
 
 def calculer_prudence(prix, conf, rec):
@@ -64,7 +63,7 @@ def calculer_confiance(score_buy, score_sell, rsi, rec):
 
 def get_data():
     try:
-        # Récupération Prix
+        # Récupération Prix Binance
         res_b = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=10).json()
         res_o = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=XAUTUSDT", timeout=10).json()
         
@@ -78,7 +77,7 @@ def get_data():
             "or": {"p": float(res_o['price']), "r": oa.indicators['RSI'], "r_p": calculer_rsi_binance("XAUTUSDT"), "rec": oa.summary['RECOMMENDATION'], "b": oa.summary['BUY'], "s": oa.summary['SELL']}
         }
     except Exception as e:
-        print(f"Erreur lors de la récupération des données : {e}")
+        print(f"Erreur API (Binance/TV): {e}")
         return None
 
 # --- GESTION DU CLAVIER ---
@@ -90,53 +89,52 @@ def menu_clavier():
 # --- MOTEUR PRINCIPAL ---
 def moteur_principal(chat_id):
     global live_btc_id, live_or_id, derniere_alerte
-    print(f"Moteur démarré pour {chat_id}")
+    print(f"Moteur d'analyse lancé pour le chat: {chat_id}")
     
     while True:
         try:
             d = get_data()
             if d and live_btc_id and live_or_id:
-                # Calculs de confiance
                 b_conf = calculer_confiance(d["btc"]["b"], d["btc"]["s"], d["btc"]["r"], d["btc"]["rec"])
                 o_conf = calculer_confiance(d["or"]["b"], d["or"]["s"], d["or"]["r"], d["or"]["rec"])
-                
-                # Mise à jour des messages Live
                 t = time.strftime('%H:%M:%S')
-                
-                txt_btc = f"₿ BTC: {d['btc']['p']}\n📊 RSI TV: {d['btc']['r']:.1f} | RSI B: {d['btc']['r_p']}\n📈 Mouv: {d['btc']['b']}B | {d['btc']['s']}S\nConf: {b_conf}% | {t}"
-                bot.edit_message_text(txt_btc, chat_id, live_btc_id)
-                
-                txt_or = f"🟡 OR: {d['or']['p']}\n📊 RSI TV: {d['or']['r']:.1f} | {t}\n📈 Mouv: {d['or']['b']}B | {d['or']['s']}S\nConf: {o_conf}%"
-                bot.edit_message_text(txt_or, chat_id, live_or_id)
 
-                # Logique des alertes (RADAR)
+                # Mise à jour BTC Live
+                try:
+                    txt_btc = f"₿ BTC: {d['btc']['p']}\n📊 RSI TV: {d['btc']['r']:.1f}\n📈 Mouv: {d['btc']['b']}B | {d['btc']['s']}S\nConf: {b_conf}% | {t}"
+                    bot.edit_message_text(txt_btc, chat_id, live_btc_id)
+                except: pass
+
+                # Mise à jour OR Live
+                try:
+                    txt_or = f"🟡 OR: {d['or']['p']}\n📊 RSI TV: {d['or']['r']:.1f}\n📈 Mouv: {d['or']['b']}B | {d['or']['s']}S\nConf: {o_conf}% | {t}"
+                    bot.edit_message_text(txt_or, chat_id, live_or_id)
+                except: pass
+
+                # Alertes RADAR
                 for key, conf, info in [("BTC", b_conf, d["btc"]), ("OR", o_conf, d["or"])]:
                     if conf >= 74 and (time.time() - derniere_alerte[key] > 300):
                         prud = calculer_prudence(info['p'], conf, info['rec'])
-                        type_sig = "BUY" if "BUY" in info['rec'] else "SELL"
-                        sl_prix = calculer_stop_loss(info['p'], key, type_sig)
-                        
-                        msg = f"⚠️ RADAR {key} ({conf}%) ⚠️\nDirection: {info['rec']}\n\n💰 Entrée: {info['p']}\n🎯 Cible: {prud}\n🛑 SL: {sl_prix}"
+                        msg = f"⚠️ RADAR {key} ({conf}%) ⚠️\nDirection: {info['rec']}\n💰 Entrée: {info['p']}\n🎯 Cible: {prud}"
                         bot.send_message(chat_id, msg)
                         derniere_alerte[key] = time.time()
             else:
-                print("Données non disponibles ou messages live non initialisés...")
+                print("En attente de données valides...")
         except Exception as e:
-            print(f"Erreur moteur : {e}")
+            print(f"Erreur boucle moteur: {e}")
             
         time.sleep(60)
 
-# --- COMMANDES BOT ---
+# --- COMMANDES ---
 @bot.message_handler(commands=['start'])
 def start(message):
     global live_btc_id, live_or_id
-    bot.send_message(message.chat.id, "Bot v3.8 (Optimisé Render) Activé 🚀", reply_markup=menu_clavier())
+    bot.send_message(message.chat.id, "Bot v3.8 Stable Activé 🚀", reply_markup=menu_clavier())
     
-    # On crée les messages et on stocke les IDs
-    live_btc_id = bot.send_message(message.chat.id, "Chargement BTC...").message_id
-    live_or_id = bot.send_message(message.chat.id, "Chargement OR...").message_id
+    live_btc_id = bot.send_message(message.chat.id, "Initialisation BTC...").message_id
+    live_or_id = bot.send_message(message.chat.id, "Initialisation OR...").message_id
     
-    # On lance le moteur une seule fois
+    # Lancement du moteur dans un thread séparé
     t = threading.Thread(target=moteur_principal, args=(message.chat.id,), daemon=True)
     t.start()
 
@@ -144,6 +142,6 @@ def start(message):
 if __name__ == "__main__":
     keep_alive()
     bot.remove_webhook()
-    print("Bot en ligne...")
+    print("Log: Système prêt. Polling en cours...")
     bot.infinity_polling(timeout=20, long_polling_timeout=10)
 
