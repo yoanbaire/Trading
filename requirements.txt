@@ -1,3 +1,5 @@
 pyTelegramBotAPI
 requests
-tradingview-ta
+tradingview_ta
+flask
+
