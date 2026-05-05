@@ -1,4 +1,4 @@
-import pyTelegramBotAPI
+import telebot
 import requests
 import time
 import threading
@@ -25,7 +25,7 @@ def keep_alive():
 
 # --- CONFIGURATION DU BOT ---
 # Utilisation d'une variable d'environnement pour la sécurité sur Render
-API_TOKEN = os.getenv('TELEGRAM_TOKEN') 
+API_TOKEN = '8690200894:AAHaIKgqfU15GSnAaJXCy_iEeSzXHk2bpCA' 
 # Si tu veux tester en local avant, remplace par : API_TOKEN = 'TON_TOKEN_ICI'
 bot = telebot.TeleBot(API_TOKEN)
 
@@ -38,7 +38,7 @@ def calculer_rsi_binance(symbole, periode=14):
         url = f"https://api.binance.com/api/v3/klines?symbol={symbole}&interval=1m&limit={periode + 1}"
         data = requests.get(url, timeout=5).json()
         closes = [float(c[4]) for c in data]
-        hausses = [max(0, closes[i] - closes[i-1]) for i in range(1, len(closes))]
+        haussesl = [max(0, closes[i] - closes[i-1]) for i in range(1, len(closes))]
         baisses = [max(0, closes[i-1] - closes[i]) for i in range(1, len(closes))]
         moy_h, moy_b = sum(hausses)/periode, sum(baisses)/periode
         return round(100 - (100 / (1 + (moy_h/moy_b))), 1) if moy_b != 0 else 100.0
