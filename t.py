@@ -24,7 +24,7 @@ def keep_alive():
 
 # --- CONFIGURATION DU BOT ---
 # Utilisation du Token en direct et activation du multi-threading natif
-API_TOKEN = '8606494026:AAHUTkTJonxPkXnveSJfTvAmMDNYpXjeJw0'
+API_TOKEN = '8690200894:AAGJ33KJmOypFlVBKIOU-vPhwcewmYwoPD8'
 bot = telebot.TeleBot(API_TOKEN, threaded=True, num_threads=4)
 
 # Variables globales
